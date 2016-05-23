@@ -1,0 +1,158 @@
+#!/usr/bin/env python
+# -*- coding: utf-8  -*-
+
+# This file is part of PCR efficiency calculator.  
+# PCR efficiency calculator is free software: you can
+# redistribute it and/or modify it under the terms of the GNU General Public
+# License as published by the Free Software Foundation, version 2.
+#
+# This program is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+# FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
+# details.
+#
+# You should have received a copy of the GNU General Public License along with
+# this program; if not, write to the Free Software Foundation, Inc., 51
+# Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+#
+# Copyright Izaskun Mallona
+# izaskun.mallona@gmail.com
+
+
+#this avoids zero float division errors
+from __future__ import division
+
+import cgi
+
+from amplicon import *
+from html import *
+from predict import *
+import operator
+
+class main:
+    """Primer efficiency tool main class."""
+        
+    #main()     
+    #cgi-bin input
+
+    form = cgi.FieldStorage()
+    seq = form.getvalue('sequence')
+    forward = form.getvalue('forward') 
+    reverse = form.getvalue('reverse') 
+    otm = form.getvalue('otm')
+    productosize = form.getvalue('productosize')
+    numreturn = form.getvalue('numreturn')
+    name= form.getvalue('name')
+    ogcpercent= form.getvalue('ogcpercent')
+    osize= form.getvalue('osize')
+    saltconc= form.getvalue('saltconc')
+    dnaconc= form.getvalue('dnaconc')
+    gcclamp= form.getvalue('gcclamp')
+    maxdifftm= form.getvalue('maxdifftm')
+
+    seq = "TCGAACCCTGCAAAGCAGAACGACCCGTGAACACGTAAAAACAACCGATCATCGAGTGGATTAAGGATTTTTCTGATCACCTCGATGCTCTGTCGATGCGCATTTACTTTTGTTCTTTTGGACTCGGTGAATGTGTCATTGACGCAATAACAACCCCCGGCACAATGTGTGCCAAGGAAAACTAAACTTGAGAATGCTTGTTTCATGTTGCCCCGTTCGCGGTGTGCTCATGGGATATGGCTTCTTTTTAATTAATCGCGTCGCACCCAACAAATCTTTGTTGGGAGCGGATATTGGTCTCCCGTGCTTATTGCGTGGTTGGCCAAAATAGGAGTCCCTTCGATGGACGCACGAACTAGTGGTGGTCGTAAAAACCCTCGTTCTTTGTTCTGCGTTAGTCGTAAGAAAATACTCTTCAAACACCCCAATGTGTTGTCTTAGGATGACGCTTCGACC"
+    forward = "GGAAGTAAAAGTCGTAACAAGG"
+    reverser = "TCCTCCGCTTATTGATATGC"
+    #this calculates efficiency when primer3 is used
+    if not form.has_key('sequence'):
+        foo = html()
+        foo.error()
+        
+    else:
+        query = Amplicon()
+        query.setLabel(name)
+        query.setSequence(seq)
+        
+        #check for non [ACTG] chars
+        query.cleanSequence()
+        
+    if (not form.has_key('forward') and form.has_key('reverse')) \
+        or (form.has_key('forward') and not form.has_key('reverse')):
+        foo = html()
+        foo.onePrimer()
+    
+    if not form.has_key('forward') and not form.has_key('reverse'):
+
+        query.setSequence(query.sequence.upper())
+
+        out = open("/tmp/in.pr3", "w")
+        out.write(query.sequence)
+        out.close()
+        
+        #primer3
+        myPrimer3 = primer_cl()
+        myPrimer3.primer3(productosize,otm,numreturn,ogcpercent ,\
+        osize,saltconc,dnaconc,maxdifftm,gcclamp)
+
+        parsedList = myPrimer3.primerParser(numreturn)
+        
+        ampliconList = []
+        i = 0
+        while (i <int(numreturn)):
+            myAmplicon = Amplicon()
+            myAmplicon.setSequence(query.getSequence()[parsedList[i][1]-1:parsedList[i][2]+int(osize)-1])
+            myAmplicon.setPrimerPair(parsedList[i][6],parsedList[i][7])
+            ampliconList.append(myAmplicon)
+            i+=1
+        
+        myPredict = predict()
+        
+        myPredict.writeHandleForR(ampliconList,numreturn)
+        
+        myListOfEfficiencies = myPredict.predictGam()
+        
+        foo = html()
+        foo.cssUp()
+        
+        i = 0
+        while (i < len(ampliconList)):
+            ampliconList[i].setEfficiency(myListOfEfficiencies[i])
+            i +=1
+        
+        ampliconList.sort(key=lambda x: x.efficiency, reverse=True)
+
+        for item in ampliconList:
+            print item.toString()
+        
+        foo.cssBottom()       
+    
+    # calculate efficiency with provided primers
+    else:    
+        forward = forward.upper()
+        reverse = reverse.upper()
+    
+        query.setSequence(query.sequence.upper())
+        query.setPrimerPair(forward,reverse)
+        
+        #check for non [ACTG] chars
+        query.cleanSequence()
+        
+        foo = html()
+        foo.cssUp()
+        
+        checking = query.checkHybridization(query.getSequence(),query.forward.sequence,query.reverse.sequence)
+        query.setSequence(checking[1])
+        
+        if checking[0]==1:
+            print """
+            <p>
+            The primers you provided do not hybridize within your sequence. 
+            The tool asumes they flank the sequence you entered.
+            </p>
+            <br>
+            """
+        ampliconList = []
+        ampliconList.append(query)
+        
+        #query.checkHybridization()
+        myPredict = predict()
+        myPredict.writeHandleForR(ampliconList,1)
+        myListOfEfficiencies = myPredict.predictGam()
+        
+        ampliconList[0].setEfficiency(myListOfEfficiencies[0])
+ 
+        print ampliconList[0].toString()
+        
+        foo.cssBottom()       
+    
+
