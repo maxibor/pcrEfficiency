@@ -1,4 +1,4 @@
-##PCR efficiency
+## PCR efficiency  
 Forked from [PCR efficiency Calculator](http://srvgen.upct.es/efficiency.html) by [Izaskun mallona](https://scholar.google.es/citations?user=kMfxCIYAAAAJ&hl=es)
 
 Run testing.py to get a prediction
